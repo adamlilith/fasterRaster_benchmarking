@@ -29,19 +29,19 @@
 	library(tictoc) # timing
 	library(usdm) # predictor selection
 
-	fff <- function() devtools::load_all(paste0(drive, '/R/fasterRaster'))
-	fff()
-	# library(fasterRaster) # rasters and vectors
+	# fff <- function() devtools::load_all(paste0(drive, '/R/fasterRaster'))
+	# fff()
+	library(fasterRaster) # rasters and vectors
 
 	# memory <- 16 * 1024
 	memory <- 56 * 1024
-	cores <- 2
+	cores <- 4
 
 	grass_dir <- 'C:/Program Files/GRASS GIS 8.3/'
 	faster(grassDir = grass_dir, memory = memory, cores = cores)
 
-	memmax <- 32
-	# memmax <- 56
+	# memory <- 32
+	memmax <- 56
 
 	terraOptions(
 		memmax = memmax,
@@ -87,20 +87,20 @@ say('#######################')
 	print(terraOptions())
 
 	say('DEMESNE', level = 2)
-	say('Demesne: ', demesne)
-	say('Primary Basins: ', paste(basins_primary, collapse = ', '))
-	say('Secondary Basins: ', paste(basins_secondary, collapse = ', '))
-	say('Country Names: ', paste(country_names, collapse = ', '), post = 1)
+	say('Demesne: ....................................................... ', demesne)
+	say('Primary Basins: ................................................ ', paste(basins_primary, collapse = ', '))
+	say('Secondary Basins: .............................................. ', paste(basins_secondary, collapse = ', '))
+	say('Country Names: ................................................. ', paste(country_names, collapse = ', '), post = 1)
 
 	say('SETTINGS', level = 2)
-	say('Drive with datasets and libraries: ', drive)
-	say('Number of cores used for multi-core functions: ', cores)
-	say('Maximum memory allowed (GB): ', memmax)
-	say('Study region buffer size (m): ', study_region_buffer_size_m)
-	say('Number of folds: ', n_folds)
-	say('Proportion of forest loss cells to sample per fold: ', cross_valid_prop)
-	say('Quantiles used to divide final prediction raster into zones: ', paste(threshold_quantiles, collapse = ', '))
-	say('Number of iterations in permutation importance test: ', n_permute)
+	say('Drive with datasets and libraries: ............................. ', drive)
+	say('Number of cores used for multi-core functions: ................. ', cores)
+	say('Maximum memory allowed (GB): ................................... ', memmax)
+	say('Study region buffer size (m): .................................. ', study_region_buffer_size_m)
+	say('Number of folds: ............................................... ', n_folds)
+	say('Proportion of forest loss cells to sample per fold: ............ ', cross_valid_prop)
+	say('Quantiles used to divide final prediction raster into zones: ... ', paste(threshold_quantiles, collapse = ', '))
+	say('Number of iterations in permutation importance test: ........... ', n_permute)
 	say('')
 
 	all_ok <- function() {
@@ -1217,7 +1217,7 @@ say('#######################')
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'rast()', target = 'Prediction rasters', dtype = 'raster', start = start, stop = stop, n = nlyr(predictions))
 
-	# average and range of rasters
+	# average and dispersion of rasters
 	start <- Sys.time()
 	prediction_mean <- mean(predictions)
 	stop <- Sys.time()
@@ -1228,40 +1228,51 @@ say('#######################')
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'app()', target = 'Minimum & maximum prediction rasters', dtype = 'raster', start = start, stop = stop)
 
+	start <- Sys.time()
+	prediction_cv <- prediction_mean / prediction_sd
+	stop <- Sys.time()
+	timings <- remember(timings, step = step, fx = 'arithmetic', target = 'Mean and SD of prediction rasters', dtype = 'raster', start = start, stop = stop)
+
+	# taking log to obviate issues with excessive CVs
+	start <- Sys.time()
+	prediction_cv <- log10(prediction_cv)
+	stop <- Sys.time()
+	timings <- remember(timings, step = step, fx = 'log10()', target = 'CV of prediction rasters', dtype = 'raster', start = start, stop = stop)
+
 	# classify prediction rasters into 9 classes based on combination of probability of forest loss and uncertainty
 	start <- Sys.time()
-	quants_mean <- global(prediction_mean, fun = quantile, probs = threshold_quantiles, na.rm = TRUE)
+	quants_mean <- global(prediction_mean, fun = 'quantile', probs = threshold_quantiles, na.rm = TRUE)
 	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'global()', target = 'Mean prediction raster', dtype = 'raster', start = start, stop = stop)
+	timings <- remember(timings, step = step, fx = 'global()', target = 'Mean prediction raster', dtype = 'raster', start = start, stop = stop, n = length(threshold_quantiles))
 
 	start <- Sys.time()
-	quants_sd <- global(prediction_sd, fun = quantile, probs = threshold_quantiles, na.rm = TRUE)
+	quants_cv <- global(prediction_cv, fun = 'quantile', probs = threshold_quantiles, na.rm = TRUE)
 	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'quantile()', target = 'SD of predictions raster', dtype = 'raster', start = start, stop = stop)
+	timings <- remember(timings, step = step, fx = 'global()', target = 'CV of prediction rasters', dtype = 'raster', start = start, stop = stop, n = length(threshold_quantiles))
 
 	quants_mean <- unlist(quants_mean)
-	quants_sd <- unlist(quants_sd)
+	quants_cv <- unlist(quants_cv)
 
 	# stack mean and sd prediction
 	start <- Sys.time()
-	prediction_mean_sd <- c(prediction_mean, prediction_sd)
+	prediction_mean_cv <- c(prediction_mean, prediction_cv)
 	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'c()', target = 'Mean and SD of predictions rasters', dtype = 'raster', start = start, stop = stop)
+	timings <- remember(timings, step = step, fx = 'c()', target = 'Mean and CV of predictions rasters', dtype = 'raster', start = start, stop = stop)
 
 	# name
 	start <- Sys.time()
-	names(prediction_mean_sd) <- c('mu', 'sigma')
+	names(prediction_mean_cv) <- c('mu', 'cv')
 	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'names()', target = 'Mean and SD of predictions rasters', dtype = 'raster', start = start, stop = stop)
+	timings <- remember(timings, step = step, fx = 'names()', target = 'Mean and CV of predictions rasters', dtype = 'raster', start = start, stop = stop)
 
 	# calculate classes based on low/medium/high probability of forest loss and uncertainty therein
-	zone_fx <- function(mu, sigma, quants_mean, quants_sd) {
+	zone_fx <- function(mu, cv, quants_mean, quants_cv) {
 	
 		mu_lower <- quants_mean[1]
 		mu_upper <- quants_mean[2]
 
-		sigma_lower <- quants_sd[1]
-		sigma_upper <- quants_sd[2]
+		sigma_lower <- quants_cv[1]
+		sigma_upper <- quants_cv[2]
 
 		out <- mu * NA
 		out[mu <= mu_lower & sigma <= sigma_lower] <- 0 # low prob/low uncert
@@ -1278,12 +1289,12 @@ say('#######################')
 		out
 
 	}
-	
+		
 	# NB using cores > 1 throws error: first error: "unused arguments (quants_mean = c(0.2665024 . . .))"
 	start <- Sys.time()
-	prediction_class <- lapp(prediction_mean_sd, fun = zone_fx, quants_mean = quants_mean, quants_sd = quants_sd, usenames = TRUE, cores = 1)
+	prediction_class <- lapp(prediction_mean_cv, fun = zone_fx, quants_mean = quants_mean, quants_cv = quants_cv, usenames = TRUE, cores = 1)
 	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'lapp()', target = 'Mean and SD of predictions rasters', dtype = 'raster', start = start, stop = stop, n = nlyr(prediction_mean_sd))
+	timings <- remember(timings, step = step, fx = 'lapp()', target = 'Mean and CV of predictions rasters', dtype = 'raster', start = start, stop = stop, n = nlyr(prediction_mean_cv))
 	
 	# name
 	start <- Sys.time()
@@ -1291,18 +1302,50 @@ say('#######################')
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'names()', target = 'Predictions class raster', dtype = 'raster', start = start, stop = stop)
 
+	# make categorical
+	start <- Sys.time()
+	prediction_class <- as.int(prediction_class)
+	stop <- Sys.time()
+	timings <- remember(timings, step = step, fx = 'as.int()', target = 'Predictions class raster', dtype = 'raster', start = start, stop = stop)
+
+	levs <- data.frame(
+		value = 0:8,
+		class = c(
+			'low prob/low uncert',
+			'medium prob/low uncert',
+			'high prob/low uncert',
+			'low prob/medium uncert',
+			'medium prob/medium uncert',
+			'high prob/medium uncert',
+			'low prob/high uncert',
+			'medium prob/high uncert',
+			'high prob/high uncert'
+		)
+	)
+
+	start <- Sys.time()
+	levels(prediction_class) <- levs
+	stop <- Sys.time()
+	timings <- remember(timings, step = step, fx = 'levels()<-', target = 'Predictions class raster', dtype = 'raster', start = start, stop = stop)
+
 	# combine
 	start <- Sys.time()
-	prediction_mean_sd_class <- c(prediction_mean_sd, prediction_class)
+	prediction_mean_cv <- c(prediction_mean_cv)
 	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'c()', target = 'Mean, SD, and class of prediction rasters', dtype = 'raster', start = start, stop = stop, n = nlyr(prediction_mean_sd_class))
+	timings <- remember(timings, step = step, fx = 'c()', target = 'Mean and CV of prediction rasters', dtype = 'raster', start = start, stop = stop, n = nlyr(prediction_mean_cv))
 
 	# save prediction rasters (mean, sd, class)
-	fn <- paste0('./outputs/', tolower(demesne), '_terra_prediction_mean_sd_class.tif')
+	fn <- paste0('./outputs/', tolower(demesne), '_terra_prediction_mean_cv.tif')
 	start <- Sys.time()
-	writeRaster(prediction_mean_sd_class, fn, overwrite = TRUE)
+	writeRaster(prediction_mean_cv, fn, overwrite = TRUE)
 	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'writeRaster()', target = 'Mean, SD, and class of prediction rasters', dtype = 'raster', start = start, stop = stop, n = nlyr(prediction_mean_sd_class))
+	timings <- remember(timings, step = step, fx = 'writeRaster()', target = 'Mean and CV of prediction rasters', dtype = 'raster', start = start, stop = stop, n = nlyr(prediction_mean_cv))
+
+	fn <- paste0('./outputs/', tolower(demesne), '_terra_prediction_class.tif')
+	start <- Sys.time()
+	writeRaster(prediction_class, fn, overwrite = TRUE)
+	stop <- Sys.time()
+	timings <- remember(timings, step = step, fx = 'writeRaster()', target = 'Mean and CV of prediction rasters', dtype = 'raster', start = start, stop = stop, n = nlyr(prediction_class))
 
 	write.csv(timings, paste0('./outputs/', tolower(demesne), '_terra_timings.csv'), row.names = FALSE)
 

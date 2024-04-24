@@ -19,11 +19,11 @@ focal_country_names <- c('China', 'India', 'Myanmar', 'Thailand', 'Laos', 'Cambo
 
 # number of sites in model calibration set and in evaluation set (each), as proportion of total cells in forest in study region
 # cross_valid_prop <- 0.1
-cross_valid_prop <- 0.01
+cross_valid_prop <- 0.05
 
 # number of cross-validation folds
-# n_folds <- 5
-n_folds <- 2
+n_folds <- 5
+# n_folds <- 2
 
 # number of times to conduct permutation test for each variable
 n_permute <- 100
