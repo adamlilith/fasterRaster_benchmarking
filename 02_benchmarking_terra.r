@@ -25,12 +25,9 @@
 	library(omnibus) # utilities
 	library(ROCR) # AUC
 	library(speedglm) # GLM
-	library(terra) # rasters and vectors
-	library(tictoc) # timing
+	library(terra) # GIS
 	library(usdm) # predictor selection
 
-	# fff <- function() devtools::load_all(paste0(drive, '/R/fasterRaster'))
-	# fff()
 	library(fasterRaster) # rasters and vectors
 
 	# memory <- 16 * 1024
@@ -38,16 +35,14 @@
 	cores <- 4
 
 	grass_dir <- 'C:/Program Files/GRASS GIS 8.3/'
-	faster(grassDir = grass_dir, memory = memory, cores = cores)
+	fasterRaster::faster(grassDir = grass_dir, memory = memory, cores = cores)
 
-	# memory <- 32
 	memmax <- 56
 
 	terraOptions(
 		memmax = memmax,
 		progress = 0
 	)
-	cores <- 2
 	
 say('#######################')
 say('### benchmark terra ###')
@@ -56,25 +51,28 @@ say('#######################')
 	### demesne
 	###########
 
-	# demesne <- 'Large'
-	# basins_primary <- priary_basins_large
-	# basins_secondary <- NA
-	# country_names <- focal_country_names
+	demesne <- 'Large'
+	basins_primary <- c('Mekong', 'Salween', 'Irrawaddy', 'Chao Phraya', 'Sittang', 'Hong (Red River)', 'Xun Jiang')
+	basins_secondary <- NA
+	country_names <- c('China', 'India', 'Myanmar', 'Thailand', 'Laos', 'Cambodia', 'Vietnam')
 
 	# demesne <- 'Medium'
 	# basins_primary <- 'Salween'
 	# basins_secondary <- NA
 	# country_names <- c('China', 'Myanmar', 'Thailand')
 
-	demesne <- 'Small'
-	basins_primary <- 'Mekong'
-	basins_secondary <- 'Nam Loi'
-	country_names <- c('China', 'Myanmar')
+	# demesne <- 'Small'
+	# basins_primary <- 'Mekong'
+	# basins_secondary <- 'Nam Loi'
+	# country_names <- c('China', 'Myanmar')
 
 	### start
 	#########
 
-	sink(paste0('./outputs/', tolower(demesne), '_terra_benchmark.txt'), split = TRUE)
+	output_dir <- paste0(substr(drive, 1, 2), '/!scratch/fasterRaster_outputs_', tolower(demesne), '/')
+	dirCreate(output_dir)
+
+	sink(paste0(output_dir, tolower(demesne), '_terra_benchmark.txt'), split = TRUE)
 	say('BENCHMARK TERRA')
 	say(date(), post = 1)
 
@@ -93,6 +91,7 @@ say('#######################')
 	say('Country Names: ................................................. ', paste(country_names, collapse = ', '), post = 1)
 
 	say('SETTINGS', level = 2)
+	say('Assessing terra!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!', post = 2)
 	say('Drive with datasets and libraries: ............................. ', drive)
 	say('Number of cores used for multi-core functions: ................. ', cores)
 	say('Maximum memory allowed (GB): ................................... ', memmax)
@@ -110,6 +109,12 @@ say('#######################')
 	
 	all_ok()
 	
+	all_ok <- function() {
+		x <- readline('Have you already done a `FINAL` run using these parameters (y/n)? ')
+		if (x != 'n') stop('All your base are belong to us.')
+	}
+	
+	all_ok()
 
 	# stores runtime information
 	timings <- data.frame()
@@ -194,9 +199,10 @@ say('#######################')
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'rast()', target = 'Soil organic carbon', dtype = 'raster', start = start, stop = stop)
 
-	### LOAD RAW VECTORS
-	####################
-	say('LOAD RAW VECTORS', level = 2)
+	### LOAD RAW VECTORS I
+	######################
+
+	say('LOAD RAW VECTORS I', level = 2)
 	step <- 'Load raw vectors'
 
 	# drainage basins
@@ -205,39 +211,6 @@ say('#######################')
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'vect()', target = 'Watershed basins', dtype = 'vector', start = start, stop = stop)
 
-	# countries of SE Asia
-	countries <- list()
-	start <- Sys.time()
-	for (i in seq_along(country_names)) {
-
-		country <- country_names[i]
-		countries[[i]] <- vect(paste0(drive, '/Research Data/GADM/Version 4.1/', country, '.gpkg'))
-
-	}
-	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'vect()', target = 'SE Asian countries', dtype = 'vector', start = start, stop = stop, n = length(countries))
-
-	# rivers
-	start <- Sys.time()
-	rivers <- vect(paste0(drive, '/Research Data/Rivers - FAO/rivers_asia_37331.shp'))
-	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'vect()', target = 'Asian rivers', dtype = 'vector', start = start, stop = stop)
-	
-	# roads vectors
-	roads <- list()
-	start <- Sys.time()
-	for (i in seq_along(country_names)) {
-	
-		country <- country_names[i]
-		if (country == 'India') country <- paste0(country, '-north-eastern-zone')
-		country <- tolower(country)
-		fn <- paste0(drive, '/Research Data/Open Street Maps (Geofabrik)/', country, '-latest-free.shp/gis_osm_roads_free_1.shp')
-		roads[[i]] <- vect(fn)
-	
-	}
-	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'vect()', target = 'Roads', dtype = 'vector', start = start, stop = stop, n = length(roads))
-	
 	### DEFINE STUDY REGION
 	#######################
 	say('DEFINE STUDY REGION', level = 2)
@@ -259,6 +232,7 @@ say('#######################')
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'buffer()', target = 'Mekong basin vector', dtype = 'vector', start = start, stop = stop)
 	
+	# # UNEEDED IN fasterRaster
 	start <- Sys.time()
 	focal_basins_agg <- aggregate(focal_basins_buff)
 	stop <- Sys.time()
@@ -276,8 +250,58 @@ say('#######################')
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'buffer()', target = 'Basins vector', dtype = 'vector', start = start, stop = stop)
 
+	### LOAD RAW VECTORS II
+	#######################
+
+	say('LOAD RAW VECTORS II', level = 2)
+	step <- 'Load raw vectors'
+
+	# rivers
+	start <- Sys.time()
+	rivers <- vect(paste0(drive, '/Research Data/Rivers - FAO/rivers_asia_37331.shp'), extent = study_region_buffered)
+	stop <- Sys.time()
+	timings <- remember(timings, step = step, fx = 'vect()', target = 'Asian rivers', dtype = 'vector', start = start, stop = stop)
+	
+	# roads vectors
+	roads <- list()
+	start <- Sys.time()
+	for (i in seq_along(country_names)) {
+	
+		country <- country_names[i]
+		say('roads: ', country)
+		if (country == 'India') country <- paste0(country, '-north-eastern-zone')
+		country <- tolower(country)
+		fn <- paste0(drive, '/Research Data/Open Street Maps (Geofabrik)/', country, '-latest-free.shp/gis_osm_roads_free_1.shp')
+		roads[[i]] <- vect(fn, extent = study_region_buffered)
+	
+	}
+	stop <- Sys.time()
+	timings <- remember(timings, step = step, fx = 'vect()', target = 'Roads', dtype = 'vector', start = start, stop = stop, n = length(roads))
+
+	# protected areas
+	pas <- list()
+	start <- Sys.time()
+	for (i in 1:3) {
+		pas[[length(pas) + 1]] <- vect(paste0(drive, '/Research Data/World Database of Protected Areas/WDPA_May2024_Public_shp_', i - 1, '/WDPA_May2024_Public_shp-polygons.shp'), extent = study_region_buffered)
+	}
+	stop <- Sys.time()
+	timings <- remember(timings, step = step, fx = 'vect()', target = 'WDPA', dtype = 'vector', start = start, stop = stop, n = 3)
+	
+	# countries of SE Asia
+	countries <- list()
+	start <- Sys.time()
+	for (i in seq_along(country_names)) {
+
+		country <- country_names[i]
+		countries[[i]] <- vect(paste0(drive, '/Research Data/GADM/Version 4.1/', country, '.gpkg'), extent = study_region_buffered)
+
+	}
+	stop <- Sys.time()
+	timings <- remember(timings, step = step, fx = 'vect()', target = 'SE Asian countries', dtype = 'vector', start = start, stop = stop, n = length(countries))
+	
 	### FOREST COVER
 	################
+
 	say('FOREST COVER', level = 2)
 	step <- 'Prepare forest cover rasters'
 
@@ -305,13 +329,6 @@ say('#######################')
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'trim()', target = 'Study region raster', dtype = 'raster', start = start, stop = stop)
 
-	# aggregated study region
-	# aggregate raster to make processing faster
-	start <- Sys.time()
-	study_region_rast_agg <- aggregate(study_region_rast, fact = 64)
-	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'aggregate()', target = 'Study region raster', dtype = 'raster', start = start, stop = stop)
-	
 	# crop
 	start <- Sys.time()
 	forest_2000 <- crop(forest_2000, study_region_rast)
@@ -323,16 +340,23 @@ say('#######################')
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'crop()', target = '2020 forest cover & study region', dtype = 'raster/vector', start = start, stop = stop)
 	
+	# aggregated study region
+	# aggregate raster to make processing faster
+	start <- Sys.time()
+	study_region_rast_agg <- aggregate(study_region_rast, fact = 64)
+	stop <- Sys.time()
+	timings <- remember(timings, step = step, fx = 'aggregate()', target = 'Study region raster', dtype = 'raster', start = start, stop = stop)
+	
 	# mask
 	start <- Sys.time()
-	forest_2000 <- forest_2000 * study_region_rast
+	forest_2000 <- mask(forest_2000, study_region_rast)
 	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'arithmetic', target = '2000 forest cover & study region raster', dtype = 'raster', start = start, stop = stop)
+	timings <- remember(timings, step = step, fx = 'mask()', target = '2000 forest cover & study region raster', dtype = 'raster', start = start, stop = stop)
 	
 	start <- Sys.time()
-	forest_2020 <- forest_2020 * study_region_rast
+	forest_2020 <- mask(forest_2020, study_region_rast)
 	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'arithmetic', target = '2020 forest cover & study region raster', dtype = 'raster', start = start, stop = stop)
+	timings <- remember(timings, step = step, fx = 'mask()', target = '2020 forest cover & study region raster', dtype = 'raster', start = start, stop = stop)
 	
 	# name (do not need a name for 2020 forest)
 	start <- Sys.time()
@@ -398,6 +422,7 @@ say('#######################')
 
 	### FOREST FRAGMENTATION CLASS
 	##############################
+
 	say('FOREST FRAGMENTATION CLASS', level = 2)
 	step <- 'Prepare forest fragmentation class predictor'
 
@@ -406,7 +431,7 @@ say('#######################')
 	# Pff (connectivities): calculate piecemeal using focal()
 
 	start <- Sys.time()
-	forest_frag_class <- fragmentation(forest_2000)
+	forest_frag_class <- fasterRaster::fragmentation(forest_2000)
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'fragmentation()', target = '2000 forest cover', dtype = 'raster', start = start, stop = stop)
 
@@ -416,53 +441,9 @@ say('#######################')
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'names()', target = 'Fragmentation raster', dtype = 'raster', start = start, stop = stop)
 
-	### ELEVATION
-	#############
-	say('ELEVATION', level = 2)
-	step <- 'Prepare elevation predictor'
-
-	# resample
-	start <- Sys.time()
-	elev_scale_7_m <- resample(elev_scale_7_m, forest_loss, threads = TRUE)
-	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'resample()', target = 'Elevation at scale 7 & forest loss', dtype = 'raster', start = start, stop = stop)
-
-	start <- Sys.time()
-	elev_scale_11_m <- resample(elev_scale_11_m, forest_loss, threads = TRUE)
-	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'resample()', target = 'Elevation at scale 11 & forest loss', dtype = 'raster', start = start, stop = stop)
-
-	# # NB REMOVED FROM FR, SO COMMENTING OUT HERE
-	# # crop to study region
-	# start <- Sys.time()
-	# elev_scale_7_m <- crop(elev_scale_7_m, study_region_buffered)
-	# stop <- Sys.time()
-	# timings <- remember(timings, step = step, fx = 'crop()', target = 'Elevation at scale 7 & study region', dtype = 'raster/vector', start = start, stop = stop)
-
-	# start <- Sys.time()
-	# elev_scale_11_m <- crop(elev_scale_11_m, study_region_buffered)
-	# stop <- Sys.time()
-	# timings <- remember(timings, step = step, fx = 'crop()', target = 'Elevation at scale 11 & study region', dtype = 'raster/vector', start = start, stop = stop)
-
-	# mask with study region
-	start <- Sys.time()
-	elev_scale_7_m <- mask(elev_scale_7_m, study_region_buffered)
-	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'mask()', target = 'Elevation at scale 7 & study region', dtype = 'raster/vector', start = start, stop = stop)
-
-	start <- Sys.time()
-	elev_scale_11_m <- mask(elev_scale_11_m, study_region_rast)
-	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'mask()', target = 'Elevation at scale 11 & study region raster', dtype = 'raster', start = start, stop = stop)
-
-	# names
-	start <- Sys.time()
-	names(elev_scale_11_m) <- 'elev_scale_11_m'
-	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'names()', target = 'Elevation at scale 11', dtype = 'raster', start = start, stop = stop)
-
 	### SLOPE
 	#########
+	
 	say('SLOPE', level = 2)
 	step <- 'Prepare slope predictor'
 
@@ -477,6 +458,17 @@ say('#######################')
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'terrain()', target = 'Elevation at scale 11', dtype = 'raster', start = start, stop = stop)
 
+	# resample
+	start <- Sys.time()
+	slope_scale_7 <- resample(slope_scale_7, forest_loss, method = 'bilinear')
+	stop <- Sys.time()
+	timings <- remember(timings, step = step, fx = 'resample()', target = 'Elevation at scale 7 & forest loss', dtype = 'raster', start = start, stop = stop)
+
+	start <- Sys.time()
+	slope_scale_11 <- resample(slope_scale_11, forest_loss, method = 'bilinear')
+	stop <- Sys.time()
+	timings <- remember(timings, step = step, fx = 'resample()', target = 'Elevation at scale 11 & forest loss', dtype = 'raster', start = start, stop = stop)
+
 	# name
 	start <- Sys.time()
 	names(slope_scale_7) <- 'slope_scale_7'
@@ -488,8 +480,33 @@ say('#######################')
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'names()', target = 'Slope at scale 11', dtype = 'raster', start = start, stop = stop)
 
+	### ELEVATION
+	#############
+
+	say('ELEVATION', level = 2)
+	step <- 'Prepare elevation predictor'
+
+	# resample
+	start <- Sys.time()
+	elev_scale_11_m <- resample(elev_scale_11_m, forest_loss, method = 'bilinear')
+	stop <- Sys.time()
+	timings <- remember(timings, step = step, fx = 'resample()', target = 'Elevation at scale 11 & forest loss', dtype = 'raster', start = start, stop = stop)
+
+	# mask
+	start <- Sys.time()
+	elev_scale_11_m <- mask(elev_scale_11_m, study_region_rast)
+	stop <- Sys.time()
+	timings <- remember(timings, step = step, fx = 'arithmetic', target = 'Elevation at scale 11 & study region raster', dtype = 'raster', start = start, stop = stop)
+
+	# names
+	start <- Sys.time()
+	names(elev_scale_11_m) <- 'elev_scale_11_m'
+	stop <- Sys.time()
+	timings <- remember(timings, step = step, fx = 'names()', target = 'Elevation at scale 11', dtype = 'raster', start = start, stop = stop)
+
 	### DISTANCE TO RIVERS
 	######################
+	
 	say('DISTANCE TO RIVERS', level = 2)
 	step <- 'Prepare distance to rivers predictor'
 
@@ -540,7 +557,7 @@ say('#######################')
 	start <- Sys.time()
 	countries <- do.call(rbind, countries)
 	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'rbind()', target = 'Countries vectors', dtype = 'vector', start = start, stop = stop, n = length(focal_country_names))
+	timings <- remember(timings, step = step, fx = 'rbind()', target = 'Countries vectors', dtype = 'vector', start = start, stop = stop, n = length(country_names))
 
 	# assign country names (carried over as factor)
 	start <- Sys.time()
@@ -629,7 +646,7 @@ say('#######################')
 	start <- Sys.time()
 	roads <- do.call(rbind, roads)
 	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'rbind()', target = 'Roads', dtype = 'raster', start = start, stop = stop, n = length(focal_country_names))
+	timings <- remember(timings, step = step, fx = 'rbind()', target = 'Roads', dtype = 'raster', start = start, stop = stop, n = length(country_names))
 	
 	# distance to nearest road
 	start <- Sys.time()
@@ -701,6 +718,7 @@ say('#######################')
 
 	### HUMAN POPULATION
 	####################
+
 	say('HUMAN POPULATION', level = 2)
 	step <- 'Prepare human population density predictor'
 
@@ -728,8 +746,54 @@ say('#######################')
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'names()', target = 'Population density at 3-cell scale', dtype = 'raster', start = start, stop = stop)
 
+	### PROTECTED AREAS
+	###################
+
+	say('PROTECTED AREAS', level = 2)
+	step <- 'Prepare protected areas predictor'
+	
+	# crop
+	pas_study_region <- list()
+	start <- Sys.time()
+	for (i in seq_along(pas)) {
+		pas_study_region[[length(pas_study_region) + 1]] <- crop(pas[[i]], study_region_buffered)
+	}
+	stop <- Sys.time()
+	timings <- remember(timings, step = step, fx = 'crop()', target = 'Protected areas', dtype = 'vector', start = start, stop = stop, n = length(pas))
+
+	# combine
+	if (length(pas_study_region) > 1) {
+		
+		start <- Sys.time()
+		pas <- do.call(rbind, pas_study_region)
+		stop <- Sys.time()
+		timings <- remember(timings, step = step, fx = 'rbind()', target = 'Protected areas', dtype = 'vector', start = start, stop = stop, n = length(pas))
+
+	} else {
+		pas <- pas_study_region[[1]]
+	}
+
+	# rasterize
+	start <- Sys.time()
+	pas_rast <- rasterize(pas, forest_2000, background = 0)
+	stop <- Sys.time()
+	timings <- remember(timings, step = step, fx = 'rasterize()', target = 'Protected areas', dtype = 'vector/raster', start = start, stop = stop)
+
+	# add levels
+	start <- Sys.time()
+	levels(pas_rast) <- data.frame(value = 0L:1L, label = c('unprotected', 'protected'))
+	stop <- Sys.time()
+	timings <- remember(timings, step = step, fx = 'levels()', target = 'Protected areas', dtype = 'raster', start = start, stop = stop)
+
+	# mask
+	start <- Sys.time()
+	pas_rast <- mask(pas_rast, study_region_rast)
+	stop <- Sys.time()
+	timings <- remember(timings, step = step, fx = 'mask()', target = 'Protected areas & study region raster', dtype = 'raster', start = start, stop = stop)
+
 	### COLLATE PREDICTOR RASTERS
 	#############################
+
 	say('COLLATE PREDICTOR RASTERS', level = 2)
 	step <- 'Collate predictor rasters'
 
@@ -774,12 +838,13 @@ say('#######################')
 	predictors_noncontinuous <- c(
 		forest_loss,
 		forest_frag_class,
-		countries_rast
+		countries_rast,
+		pas_rast
 	)
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'c()', target = 'Non-continuous rasters', dtype = 'raster', start = start, stop = stop, n = nlyr(predictors_noncontinuous))
 
-	# crop and mask to non-buffered study region
+	# crop to non-buffered study region
 	start <- Sys.time()
 	predictors_noncontinuous <- crop(predictors_noncontinuous, study_region)
 	stop <- Sys.time()
@@ -834,11 +899,11 @@ say('#######################')
 	start <- Sys.time()
 	select_from <- c(forest_loss_focal_basin, forest_frag_class_focal_basin)
 	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'c', target = 'Forest loss & fragmentation rasters', dtype = 'raster', start = start, stop = stop, n = nlyr(select_from))
+	timings <- remember(timings, step = step, fx = 'c()', target = 'Forest loss & fragmentation rasters', dtype = 'raster', start = start, stop = stop, n = nlyr(select_from))
 
 	# save raster stack
 	start <- Sys.time()
-	writeRaster(env, paste0('./outputs/', tolower(demesne), '_terra_response_and_predictors.tif'), overwrite = TRUE)
+	writeRaster(env, paste0(output_dir, tolower(demesne), '_terra_response_and_predictors.tif'), overwrite = TRUE)
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'writeRaster()', target = 'Continuous & non-continuous rasters', dtype = 'raster', start = start, stop = stop, n = nlyr(env))
 	
@@ -1066,6 +1131,7 @@ say('#######################')
 		predict_eval <- predict(model_multivar, eval, type = 'response')
 		pred_eval <- prediction(predict_eval, labels = eval$forest_loss)
 		auc_obs <- performance(pred_eval, 'auc')@y.values[[1]]
+		tjurs_r2_obs <- mean(predict_eval[eval$forest_loss == 1]) - (1 - mean(predict_eval[eval$forest_loss == 0]))
 		
 		# get coefficient values
 		coefs <- coefficients(model_multivar)
@@ -1085,7 +1151,8 @@ say('#######################')
 				n_eval_no_loss = n_eval_no_loss,
 				coefficient = coef_names,
 				coefficient_value = coefs,
-				auc = auc_obs
+				auc = auc_obs,
+				tjurs_r2 = tjurs_r2_obs
 			)
 		)
 
@@ -1106,6 +1173,7 @@ say('#######################')
 			predict_eval <- predict(model_univar, eval, type = 'response')
 			pred_eval <- prediction(predict_eval, labels = eval$forest_loss)
 			auc_univar <- performance(pred_eval, 'auc')@y.values[[1]]
+			tjurs_r2_univar <- mean(predict_eval[eval$forest_loss == 1]) - (1 - mean(predict_eval[eval$forest_loss == 0]))
 			
 			# get coefficient values
 			coef <- coefficients(model_univar)[this_pred]
@@ -1125,7 +1193,8 @@ say('#######################')
 					n_eval_no_loss = n_eval_no_loss,
 					coefficient = this_pred,
 					coefficient_value = coef,
-					auc = auc_univar
+					auc = auc_univar,
+					tjurs_r2 = tjurs_r2_univar
 				)
 			)
 
@@ -1133,25 +1202,28 @@ say('#######################')
 			##############################
 			
 			eval_copy <- eval
-			auc_permute <- rep(NA_real_, n_permute)
+			auc_permute <- tjurs_r2_permute <- rep(NA_real_, n_permute)
 
 			# iterate permutation test
 			for (i in seq_len(n_permute)) {
 			
-				eval_copy[ , this_pred] <- sample(eval_copy[ , this_pred], n)
+				eval_copy[ , this_pred] <- sample(eval_copy[[this_pred]], n)
 				predict_eval_permute <- predict(model_multivar, eval_copy, type = 'response')
 
 				pred_eval <- prediction(predict_eval_permute, labels = eval$forest_loss)
 				auc_permute[i] <- performance(pred_eval, 'auc')@y.values[[1]]
+				tjurs_r2_permute[i] <- mean(predict_eval_permute[eval$forest_loss == 1]) - (1 - mean(predict_eval_permute[eval$forest_loss == 0]))
 			
 			}
 
 			auc_permute <- mean(auc_permute)
+			tjurs_r2_permute <- mean(tjurs_r2_permute)
 
 			results <- rbind(
 				results,
 				data.frame(
 					demesne = demesne,
+					model_type = 'permuted',
 					k = k,
 					n_calib = n_calib,
 					n_eval = n_eval,
@@ -1159,10 +1231,10 @@ say('#######################')
 					n_calib_no_loss = n_calib_no_loss,
 					n_eval_loss = n_eval_loss,
 					n_eval_no_loss = n_eval_no_loss,
-					auc_type = 'permuted',
 					coefficient = this_pred,
 					coefficient_value = NA,
-					auc = auc_permute
+					auc = auc_permute,
+					tjurs_r2 = tjurs_r2_permute
 				)
 			)
 
@@ -1192,17 +1264,15 @@ say('#######################')
 		timings <- remember(timings, step = step, fx = 'predict()', target = 'Predictor raster', dtype = 'raster', start = start, stop = stop, n = length(env_selected))
 
 		# save prediction raster
-		fn <- paste0('./outputs/', tolower(demesne), '_terra_fold_', prefix(k, 2), '.tif')
+		fn <- paste0(output_dir, tolower(demesne), '_terra_fold_', prefix(k, 2), '.tif')
 		start <- Sys.time()
-		predict(prediction_rast, filename = fn, overwrite = TRUE)
+		writeRaster(prediction_rast, filename = fn, overwrite = TRUE)
 		stop <- Sys.time()
 		timings <- remember(timings, step = step, fx = 'writeRaster()', target = 'Predictor raster', dtype = 'raster', start = start, stop = stop)
 
-		writeRaster
-
 	} # next fold
 	
-	write.csv(results, paste0('./outputs/', tolower(demesne), '_terra_results.csv'), row.names = FALSE)
+	write.csv(results, paste0(output_dir, tolower(demesne), '_terra_results.csv'), row.names = FALSE)
 
 	### POST-PROCESS PREDICTION RASTERS
 	###################################
@@ -1211,7 +1281,7 @@ say('#######################')
 	step <- 'Post-process prediction rasters'
 
 	# load prediction rasters
-	fns <- paste0('./outputs/', tolower(demesne), '_fold_', prefix(1:n_folds, 2), '.tif')
+	fns <- paste0(output_dir, tolower(demesne), '_terra_fold_', prefix(1:n_folds, 2), '.tif')
 	start <- Sys.time()
 	predictions <- rast(fns)
 	stop <- Sys.time()
@@ -1241,12 +1311,12 @@ say('#######################')
 
 	# classify prediction rasters into 9 classes based on combination of probability of forest loss and uncertainty
 	start <- Sys.time()
-	quants_mean <- global(prediction_mean, fun = 'quantile', probs = threshold_quantiles, na.rm = TRUE)
+	quants_mean <- global(prediction_mean, fun = quantile, probs = threshold_quantiles, na.rm = TRUE)
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'global()', target = 'Mean prediction raster', dtype = 'raster', start = start, stop = stop, n = length(threshold_quantiles))
 
 	start <- Sys.time()
-	quants_cv <- global(prediction_cv, fun = 'quantile', probs = threshold_quantiles, na.rm = TRUE)
+	quants_cv <- global(prediction_cv, fun = quantile, probs = threshold_quantiles, na.rm = TRUE)
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'global()', target = 'CV of prediction rasters', dtype = 'raster', start = start, stop = stop, n = length(threshold_quantiles))
 
@@ -1275,17 +1345,17 @@ say('#######################')
 		sigma_upper <- quants_cv[2]
 
 		out <- mu * NA
-		out[mu <= mu_lower & sigma <= sigma_lower] <- 0 # low prob/low uncert
-		out[mu > mu_lower & mu <= mu_upper & sigma <= sigma_lower] <- 1 # medium prob/low uncert
-		out[mu > mu_upper & sigma <= sigma_lower] <- 2 # high prob/low uncert
+		out[mu <= mu_lower & cv <= sigma_lower] <- 0 # low prob/low uncert
+		out[mu > mu_lower & mu <= mu_upper & cv <= sigma_lower] <- 1 # medium prob/low uncert
+		out[mu > mu_upper & cv <= sigma_lower] <- 2 # high prob/low uncert
 
-		out[mu <= mu_lower & sigma > sigma_lower & sigma <= sigma_upper] <- 3 # low prob/medium uncert
-		out[mu > mu_lower & mu <= mu_upper & sigma > sigma_lower & sigma <= sigma_upper] <- 4 # medium prob/medium uncert
-		out[mu >= mu_upper & sigma > sigma_lower & sigma <= sigma_upper] <- 5 # high prob/medium uncert
+		out[mu <= mu_lower & cv > sigma_lower & cv <= sigma_upper] <- 3 # low prob/medium uncert
+		out[mu > mu_lower & mu <= mu_upper & cv > sigma_lower & cv <= sigma_upper] <- 4 # medium prob/medium uncert
+		out[mu >= mu_upper & cv > sigma_lower & cv <= sigma_upper] <- 5 # high prob/medium uncert
 
-		out[mu <= mu_lower & sigma > sigma_upper] <- 6 # low prob/high uncert
-		out[mu > mu_lower & mu <= mu_upper & sigma > sigma_upper] <- 7 # medium prob/high uncert
-		out[mu > mu_upper & sigma > sigma_upper] <- 8 # high prob/high uncert
+		out[mu <= mu_lower & cv > sigma_upper] <- 6 # low prob/high uncert
+		out[mu > mu_lower & mu <= mu_upper & cv > sigma_upper] <- 7 # medium prob/high uncert
+		out[mu > mu_upper & cv > sigma_upper] <- 8 # high prob/high uncert
 		out
 
 	}
@@ -1335,19 +1405,19 @@ say('#######################')
 	timings <- remember(timings, step = step, fx = 'c()', target = 'Mean and CV of prediction rasters', dtype = 'raster', start = start, stop = stop, n = nlyr(prediction_mean_cv))
 
 	# save prediction rasters (mean, sd, class)
-	fn <- paste0('./outputs/', tolower(demesne), '_terra_prediction_mean_cv.tif')
+	fn <- paste0(output_dir, tolower(demesne), '_terra_prediction_mean_cv.tif')
 	start <- Sys.time()
 	writeRaster(prediction_mean_cv, fn, overwrite = TRUE)
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'writeRaster()', target = 'Mean and CV of prediction rasters', dtype = 'raster', start = start, stop = stop, n = nlyr(prediction_mean_cv))
 
-	fn <- paste0('./outputs/', tolower(demesne), '_terra_prediction_class.tif')
+	fn <- paste0(output_dir, tolower(demesne), '_terra_prediction_class.tif')
 	start <- Sys.time()
 	writeRaster(prediction_class, fn, overwrite = TRUE)
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'writeRaster()', target = 'Mean and CV of prediction rasters', dtype = 'raster', start = start, stop = stop, n = nlyr(prediction_class))
 
-	write.csv(timings, paste0('./outputs/', tolower(demesne), '_terra_timings.csv'), row.names = FALSE)
+	write.csv(timings, paste0(output_dir, tolower(demesne), '_terra_timings.csv'), row.names = FALSE)
 
 say('DONE!', deco = '^', level = 1)
 say(date())
