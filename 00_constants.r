@@ -18,12 +18,19 @@ study_region_buffer_size_m <- 60000
 # focal_country_names <- c('China', 'India', 'Myanmar', 'Thailand', 'Laos', 'Cambodia', 'Vietnam')
 
 # number of sites in model calibration set and in evaluation set (each)
-cross_valid_prop <- 0.01
+cross_valid_prop_small <- 0.1
+cross_valid_prop_medium <- 0.01
+cross_valid_prop_large <- 0.001
 
 # # number of cross-validation folds
 n_folds_small <- 30
 n_folds_medium <- 30
 n_folds_large <- 30
+
+# factor by which to aggregate cells for calculation of distance metrics
+small_agg_factor <- 16
+medium_agg_factor <- 256
+large_agg_factor <- 1024
 
 # take this times number of cross-validation points to use for variable selection
 inflation_for_variable_selection <- 2.5

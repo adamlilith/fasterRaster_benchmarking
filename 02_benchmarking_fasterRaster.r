@@ -49,39 +49,52 @@ say('#################')
 say('### benchmark ###')
 say('#################')
 
-	### demesne
+	### options
 	###########
 
-	# demesne <- 'Large'
-	# basins_primary <- c('Mekong', 'Salween', 'Irrawaddy', 'Chao Phraya', 'Sittang', 'Hong (Red River)', 'Xun Jiang')
-	# basins_secondary <- NA
-	# country_names <- c('China', 'India', 'Myanmar', 'Thailand', 'Laos', 'Cambodia', 'Vietnam')
-	# extent <- c(73, 135, 8, 54)
-
+	demesne <- 'Large'
 	# demesne <- 'Medium'
-	# basins_primary <- 'Salween'
-	# basins_secondary <- NA
-	# country_names <- c('China', 'Myanmar', 'Thailand')
-	# extent <- c(73, 134, 8, 54)
-
-	demesne <- 'Small'
-	basins_primary <- 'Mekong'
-	basins_secondary <- 'Nam Loi'
-	country_names <- c('China', 'Myanmar')
-	extent <- c(73, 134, 9, 54)
+	# demesne <- 'Small'
 
 	source('./fasterRaster_benchmarking/00_constants.r')
 
-	if (demesne == 'Small') {
-		n_folds <- n_folds_small
-	} else if (demesne == 'Medium') {
-		n_folds <- n_folds_medium
-	} else if (demesne == 'Large') {
-		n_folds <- n_folds_large
-	}
-
 	### start
 	#########
+
+	if (demesne == 'Small') {
+
+		basins_primary <- 'Mekong'
+		basins_secondary <- 'Nam Loi'
+		country_names <- c('China', 'Myanmar')
+		n_folds <- n_folds_small
+		cross_valid_prop <- cross_valid_prop_small
+		tile_names <- c('30N_090E', '30N_100E')
+		extent <- c(73, 134, 9, 54)
+		aggregate_factor <- small_agg_factor
+
+	} else if (demesne == 'Medium') {
+
+		basins_primary <- 'Salween'
+		basins_secondary <- NA
+		country_names <- c('China', 'Myanmar', 'Thailand')
+		n_folds <- n_folds_medium
+		cross_valid_prop <- cross_valid_prop_medium
+		tile_names <- c('30N_090E', '40N_090E', '20N_090E', '30N_100E')
+		extent <- c(73, 134, 8, 54)
+		aggregate_factor <- medium_agg_factor
+
+	} else if (demesne == 'Large') {
+
+		basins_primary <- c('Mekong', 'Salween', 'Irrawaddy', 'Chao Phraya', 'Sittang')
+		basins_secondary <- NA
+		country_names <- c('China', 'India', 'Myanmar', 'Thailand', 'Laos', 'Cambodia', 'Vietnam')
+		n_folds <- n_folds_large
+		cross_valid_prop <- cross_valid_prop_large
+		tile_names <- c('30N_090E', '20N_100E', '20N_090E', '10N_100E', '40N_090E', '30N_100E')
+		extent <- c(73, 135, 8, 54)
+		aggregate_factor <- large_agg_factor
+
+	}
 
 	output_dir <- paste0(substr(drive, 1, 2), '/!scratch/fasterRaster_outputs_', tolower(demesne), '/')
 	dirCreate(output_dir)
@@ -106,17 +119,18 @@ say('#################')
 	say('Country Names: ................................................. ', paste(country_names, collapse = ', '), post = 1)
 
 	say('SETTINGS', level = 2)
-	say('Assessing fasterRaster!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!', post = 2)
-	say('Drive with datasets and libraries: ............................. ', drive)
-	say('Number of cores used for multi-core functions: ................. ', cores)
-	say('Maximum memory allowed for fasterRaster (GB): .................. ', memory / 1024)
-	say('Maximum memory allowed for terra (GB): ......................... ', memmax)
-	say('Study region buffer size (m): .................................. ', study_region_buffer_size_m)
-	say('Number of folds: ............................................... ', n_folds)
-	say('Proportion of forest persistence/loss cells per fold: .......... ', cross_valid_prop)
-	say('Inflation of number of points for variable selection: .......... ', inflation_for_variable_selection)
-	say('Quantiles used to divide final prediction raster into zones: ... ', paste(threshold_quantiles, collapse = ', '))
-	say('Number of iterations in permutation importance test: ........... ', n_permute)
+	say('Drive with datasets and libraries: ............................... ', drive)
+	say('Number of cores used for multi-core functions: ................... ', cores)
+	say('Use multiple threads for `terra` functions that allow it: ........ ', threads)
+	say('Maximum memory allowed for fasterRaster (GB): .................... ', memory / 1024)
+	say('Maximum memory allowed for terra (GB): ........................... ', memmax)
+	say('Study region buffer size (m): .................................... ', study_region_buffer_size_m)
+	say('Factor by which to aggregate raster for distance calculations: ... ', aggregate_factor)
+	say('Number of folds: ................................................. ', n_folds)
+	say('Proportion of forest persistence/loss cells per fold: ............ ', cross_valid_prop)
+	say('Inflation of number of points for variable selection: ............ ', inflation_for_variable_selection)
+	say('Quantiles used to divide final prediction raster into zones: ..... ', paste(threshold_quantiles, collapse = ', '))
+	say('Number of iterations in permutation importance test: ............. ', n_permute)
 	say('')
 
 	all_ok <- function() {
@@ -143,13 +157,6 @@ say('#################')
 	step <- 'Load raw rasters'
 
 	# forest cover for 2000 and 2020
-	tile_names <- if (demesne == 'Large') {
-		c('30N_090E', '20N_100E', '20N_090E', '10N_100E', '40N_090E', '30N_100E', '30N_110E')
-	} else if (demesne == 'Medium') {
-		c('30N_090E', '40N_090E', '20N_090E', '30N_100E')
-	} else if (demesne == 'Small') {
-		c('30N_090E', '30N_100E')
-	}
 	forest_files_2000 <- paste0(drive, '/Research Data/GLAD Lab/Potapov et al 2020 Forest Height & Extent/2000/', tile_names, '.tif')
 	forest_files_2020 <- paste0(drive, '/Research Data/GLAD Lab/Potapov et al 2020 Forest Height & Extent/2020/', tile_names, '.tif')
 	
@@ -160,7 +167,7 @@ say('#################')
 	}
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'fast()', target = '2000 forest cover', dtype = 'raster', start = start, stop = stop, n = length(forest_2000))
-	
+
 	forest_2020 <- list()
 	start <- Sys.time()
 	for (i in seq_along(forest_files_2020)) {
@@ -288,7 +295,7 @@ say('#################')
 	study_region_buffered <- buffer(study_region, dissolve = TRUE, width = study_region_buffer_size_deg) # buffer in degrees
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'buffer()', target = 'Study region vector', dtype = 'vector', start = start, stop = stop)
-	
+
 	# save study region vector
 	start <- Sys.time()
 	writeVector(study_region, paste0(output_dir, tolower(demesne), '_fasterRaster_study_region.gpkg'), overwrite = TRUE)
@@ -380,9 +387,8 @@ say('#################')
 	
 	# aggregated study region
 	# aggregate raster to make processing faster
-	fact <- if (demesne == "Small") { 48 } else if (demesne == "Medium") { 128 + 64 } else if (demesne == "Large") { 1024 + 512 }
 	start <- Sys.time()
-	study_region_rast_agg <- aggregate(study_region_rast, fact = fact)
+	study_region_rast_agg <- aggregate(study_region_rast, fact = aggregate_factor)
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'aggregate()', target = 'Study region raster', dtype = 'raster', start = start, stop = stop)
 	
@@ -404,10 +410,12 @@ say('#################')
 	timings <- remember(timings, step = step, fx = 'comparison', target = 'Forest change raster', dtype = 'raster', start = start, stop = stop)
 	
 	# mask forest loss raster so it contains only cells that had forest in 2000
+	forest_2000_no_forest_masked <- forest_2000
+
 	start <- Sys.time()
-	forest_2000_no_forest_masked <- app(forest_2000, fun = '= if (forest_2000 == 0, null(), forest_2000)')
+	forest_2000_no_forest_masked[forest_2000_no_forest_masked == 0] <- NA_integer_
 	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'app()', target = 'Forest 2000 raster', dtype = 'raster', start = start, stop = stop)
+	timings <- remember(timings, step = step, fx = 'replace_single_square_bracket', target = 'Forest 2000 raster', dtype = 'raster', start = start, stop = stop)
 	
 	start <- Sys.time()
 	forest_loss <- forest_loss * forest_2000_no_forest_masked
@@ -456,7 +464,7 @@ say('#################')
 	step <- 'Prepare forest fragmentation class predictor'
 
 	start <- Sys.time()
-	forest_frag_class <- fragmentation(forest_2000)
+	forest_frag_class <- fragmentation(forest_2000, verbose = TRUE)
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'fragmentation()', target = '2000 forest cover', dtype = 'raster', start = start, stop = stop)
 
@@ -527,10 +535,9 @@ say('#################')
 	if (impossible) {
 	
 		start <- Sys.time()
-		fun <- "= if(elev_aws_z11_m < 1, null(), elev_aws_z11_m)"
-		elev_scale_11_m <- app(elev_scale_11_m, fun)
+		elev_scale_11_m[elev_scale_11_m < 0] <- NA
 		stop <- Sys.time()
-		timings <- remember(timings, step = step, fx = 'app()', target = 'Elevation at scale 11', dtype = 'raster', start = start, stop = stop)
+		timings <- remember(timings, step = step, fx = 'replace_single_square_bracket', target = 'Elevation at scale 11', dtype = 'raster', start = start, stop = stop)
 	
 	}
 
@@ -1018,7 +1025,7 @@ say('#################')
 
 		### extract from full response/predictor stack
 		start <- Sys.time()
-		response_predictors <- extract(env, sample_sites)
+		response_predictors <- extract(env, sample_sites, cats = TRUE)
 		stop <- Sys.time()
 		timings <- remember(timings, step = step, fx = 'extract()', target = 'Predictor and response rasters & calibration/evaluation sites', dtype = 'raster/vector', start = start, stop = stop, n = length(env))
 
