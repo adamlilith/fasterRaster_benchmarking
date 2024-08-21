@@ -38,6 +38,7 @@
 	grass_dir <- 'C:/Program Files/GRASS GIS 8.3/'
 	faster(grassDir = grass_dir, memory = memory, cores = cores)
 
+	threads <- TRUE
 	memmax <- 56
 
 	terraOptions(
@@ -67,7 +68,7 @@ say('#################')
 		basins_secondary <- 'Nam Loi'
 		country_names <- c('China', 'Myanmar')
 		n_folds <- n_folds_small
-		cross_valid_prop <- cross_valid_prop_small
+		cross_valid_prop <- cross_valid_prop_small_fasterRaster
 		tile_names <- c('30N_090E', '30N_100E')
 		extent <- c(73, 134, 9, 54)
 		aggregate_factor <- small_agg_factor
@@ -78,7 +79,7 @@ say('#################')
 		basins_secondary <- NA
 		country_names <- c('China', 'Myanmar', 'Thailand')
 		n_folds <- n_folds_medium
-		cross_valid_prop <- cross_valid_prop_medium
+		cross_valid_prop <- cross_valid_prop_medium_fasterRaster
 		tile_names <- c('30N_090E', '40N_090E', '20N_090E', '30N_100E')
 		extent <- c(73, 134, 8, 54)
 		aggregate_factor <- medium_agg_factor
@@ -89,7 +90,7 @@ say('#################')
 		basins_secondary <- NA
 		country_names <- c('China', 'India', 'Myanmar', 'Thailand', 'Laos', 'Cambodia', 'Vietnam')
 		n_folds <- n_folds_large
-		cross_valid_prop <- cross_valid_prop_large
+		cross_valid_prop <- cross_valid_prop_large_fasterRaster
 		tile_names <- c('30N_090E', '20N_100E', '20N_090E', '10N_100E', '40N_090E', '30N_100E')
 		extent <- c(73, 135, 8, 54)
 		aggregate_factor <- large_agg_factor
@@ -1368,9 +1369,9 @@ say('#################')
 	timings <- remember(timings, step = step, fx = 'mean()', target = 'Prediction rasters', dtype = 'raster', start = start, stop = stop, n = nlyr(predictions))
 
 	start <- Sys.time()
-	prediction_sd <- sd(predictions)
+	prediction_sd <- stdev(predictions, pop = FALSE)
 	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'sd()', target = 'Prediction rasters', dtype = 'raster', start = start, stop = stop)
+	timings <- remember(timings, step = step, fx = 'stdev()', target = 'Prediction rasters', dtype = 'raster', start = start, stop = stop)
 
 	start <- Sys.time()
 	prediction_cv <- prediction_sd / prediction_mean
@@ -1379,18 +1380,12 @@ say('#################')
 
 	### classify prediction rasters into 9 classes based on combination of probability of forest loss and uncertainty
 	start <- Sys.time()
-	quants_mean <- rep(NA_real_, length(threshold_quantiles))
-	for (i in seq_along(threshold_quantiles)) {
-		quants_mean[i] <- global(prediction_mean, fun = 'quantile', prob = threshold_quantiles[i])
-	}
+	quants_mean <- global(prediction_mean, fun = 'quantile', probs = threshold_quantiles)
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'global()', target = 'Mean prediction raster', dtype = 'raster', start = start, stop = stop, n = length(threshold_quantiles))
 
 	start <- Sys.time()
-	quants_cv <- rep(NA_real_, length(threshold_quantiles))
-	for (i in seq_along(threshold_quantiles)) {
-		quants_cv[i] <- global(prediction_cv, fun = 'quantile', prob = threshold_quantiles[i])
-	}
+	quants_cv <- global(prediction_cv, fun = 'quantile', probs = threshold_quantiles)
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'global()', target = 'CV prediction rasters', dtype = 'raster', start = start, stop = stop, n = length(threshold_quantiles))
 
@@ -1484,7 +1479,7 @@ say('#################')
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'levels()<-', target = 'Predictions class raster', dtype = 'raster', start = start, stop = stop)
 
-	# save prediction rasters (mean, sd)
+	# save prediction rasters (mean, CV)
 	byLayer <- bigTiff <- demesne %in% c('Medium', 'Large')
 	fn <- paste0(output_dir, tolower(demesne), '_fasterRaster_prediction_mean_cv.tif')
 	start <- Sys.time()

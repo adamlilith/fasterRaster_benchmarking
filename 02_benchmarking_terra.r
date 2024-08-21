@@ -69,7 +69,7 @@ say('#################')
 		basins_secondary <- 'Nam Loi'
 		country_names <- c('China', 'Myanmar')
 		n_folds <- n_folds_small
-		cross_valid_prop <- cross_valid_prop_small
+		cross_valid_prop <- cross_valid_prop_small_terra
 		tile_names <- c('30N_090E', '30N_100E')
 		extent <- c(73, 134, 9, 54)
 		aggregate_factor <- small_agg_factor
@@ -80,7 +80,7 @@ say('#################')
 		basins_secondary <- NA
 		country_names <- c('China', 'Myanmar', 'Thailand')
 		n_folds <- n_folds_medium
-		cross_valid_prop <- cross_valid_prop_medium
+		cross_valid_prop <- cross_valid_prop_medium_terra
 		tile_names <- c('30N_090E', '40N_090E', '20N_090E', '30N_100E')
 		extent <- c(73, 134, 8, 54)
 		aggregate_factor <- medium_agg_factor
@@ -91,7 +91,7 @@ say('#################')
 		basins_secondary <- NA
 		country_names <- c('China', 'India', 'Myanmar', 'Thailand', 'Laos', 'Cambodia', 'Vietnam')
 		n_folds <- n_folds_large
-		cross_valid_prop <- cross_valid_prop_large
+		cross_valid_prop <- cross_valid_prop_large_terra
 		tile_names <- c('30N_090E', '20N_100E', '20N_090E', '10N_100E', '40N_090E', '30N_100E')
 		extent <- c(73, 135, 8, 54)
 		aggregate_factor <- large_agg_factor
@@ -950,8 +950,6 @@ say('#################')
 	say('initially want ', round(inflation * inflation_for_variable_selection * cross_valid_n) ,' points for variable selection')
 	say('eventually want ', round(inflation_for_variable_selection * cross_valid_n) ,' points for variable selection')
 
-	write.csv(timings, paste0(output_dir, tolower(demesne), '_terra_timings_preliminary.csv'), row.names = FALSE)
-
 	### VARIABLE SELECTION
 	######################
 
@@ -987,6 +985,8 @@ say('#################')
 	env <- env[[vars_selected]]
 	stop <- Sys.time()
 	timings <- remember(timings, step = step, fx = 'subset_double_brackets', target = 'Response and predictor rasters', dtype = 'raster', start = start, stop = stop, n = nlyr(env))
+
+	write.csv(timings, paste0(output_dir, tolower(demesne), '_terra_timings_preliminary.csv'), row.names = FALSE)
 
 	### CROSS VALIDATION
 	####################
@@ -1366,7 +1366,7 @@ say('#################')
 
 	} # next fold
 	
-	write.csv(results, paste0(output_dir, tolower(demesne), '_fasterRaster_results.csv'), row.names = FALSE)
+	write.csv(results, paste0(output_dir, tolower(demesne), '_terra_results.csv'), row.names = FALSE)
 
 	### POST-PROCESS PREDICTION RASTERS
 	###################################
@@ -1387,9 +1387,9 @@ say('#################')
 	timings <- remember(timings, step = step, fx = 'mean()', target = 'Prediction rasters', dtype = 'raster', start = start, stop = stop, n = nlyr(predictions))
 
 	start <- Sys.time()
-	prediction_sd <- app(predictions, fun = 'sd', na.rm = TRUE)
+	prediction_sd <- stdev(predictions, pop = FALSE)
 	stop <- Sys.time()
-	timings <- remember(timings, step = step, fx = 'app()', target = 'Prediction rasters', dtype = 'raster', start = start, stop = stop)
+	timings <- remember(timings, step = step, fx = 'stdev()', target = 'Prediction rasters', dtype = 'raster', start = start, stop = stop)
 
 	start <- Sys.time()
 	prediction_cv <- prediction_sd / prediction_mean
