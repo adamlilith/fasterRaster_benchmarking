@@ -24,7 +24,7 @@ cross_valid_prop_large_fasterRaster <- 0.001
 
 cross_valid_prop_small_terra <- cross_valid_prop_small_fasterRaster
 cross_valid_prop_medium_terra <- cross_valid_prop_medium_fasterRaster
-cross_valid_prop_large_terra <- cross_valid_prop_large_fasterRaster / 100 # lower than fsaterRaster bc takes too much time!
+cross_valid_prop_large_terra <- cross_valid_prop_large_fasterRaster # lower than fasterRaster bc takes too much time!
 
 # number of cross-validation folds
 n_folds_small <- 50
